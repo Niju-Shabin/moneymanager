@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investment Ledger</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        h2 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .btn-danger {
+            background-color: #e74c3c;
+        }
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: right;
+            white-space: nowrap;
+        }
+        th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) {
+            text-align: left;
+        }
+        th {
+            background-color: #2c3e50;
+            color: white;
+        }
+        .balance-row td {
+            background-color: #f9f9f9;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .totals-row td {
+            background-color: #ecf0f1;
+            font-weight: bold;
+        }
+        .error {
+            color: #e74c3c;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .instructions {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        code {
+            background: #d1e8f0;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>📊 Investment Ledger</h2>
+    
+    <div class="instructions">
+        <strong>Commands available:</strong><br>
+        1. <code>Sd [amount] from everyone "[label]"</code> (Split & Decrease)<br>
+        2. <code>Sg [amount] from everyone "[label]"</code> (Split & Gain)<br>
+        3. <code>[Name] [amount]</code> (Individual deduction, e.g., <code>Raees -250</code>)<br>
+    </div>
+
+    <div id="error-msg" class="error"></div>
+
+    <div class="input-group">
+        <input type="text" id="cmd-input" placeholder='e.g., Sd 100 from everyone "travel expenses"'>
+        <button onclick="processCommand()">Add Transaction</button>
+        <button class="btn-danger" onclick="resetLedger()">Reset All Data</button>
+    </div>
+
+    <div id="table-container"></div>
+</div>
+
+<script>
+    const investors = ["Hashir", "Raees", "Shadin", "Niju", "Nichu"];
+    
+    // Initialize data from local storage or set default first transaction
+    let transactions = JSON.parse(localStorage.getItem('ledgerTxns'));
+    
+    if (!transactions) {
+        initDefault();
+    }
+
+    function initDefault() {
+        transactions = [{
+            label: "Txn 1 (Initial Deposit)",
+            values: { Hashir: 15000, Raees: 12500, Shadin: 12500, Niju: 12500, Nichu: 12500 }
+        }];
+        saveData();
+    }
+
+    function saveData() {
+        localStorage.setItem('ledgerTxns', JSON.stringify(transactions));
+    }
+
+    function processCommand() {
+        const inputStr = document.getElementById('cmd-input').value.trim();
+        const errorMsg = document.getElementById('error-msg');
+        errorMsg.textContent = "";
+
+        if (!inputStr) return;
+
+        // Regex definitions
+        const sdRegex = /^Sd\s+(\d+(?:\.\d+)?)\s+from everyone\s+"([^"]+)"$/i;
+        const sgRegex = /^Sg\s+(\d+(?:\.\d+)?)\s+from everyone\s+"([^"]+)"$/i;
+        const indivRegex = /^([A-Za-z]+)\s+(-?\d+(?:\.\d+)?)$/i;
+
+        let newValues = { Hashir: 0, Raees: 0, Shadin: 0, Niju: 0, Nichu: 0 };
+        let label = `Txn ${transactions.length + 1}`;
+
+        if (sdRegex.test(inputStr)) {
+            const match = inputStr.match(sdRegex);
+            const amount = parseFloat(match[1]);
+            label += ` (${match[2]})`;
+            const splitAmount = amount / 5;
+            investors.forEach(inv => newValues[inv] = -splitAmount);
+        } 
+        else if (sgRegex.test(inputStr)) {
+            const match = inputStr.match(sgRegex);
+            const amount = parseFloat(match[1]);
+            label += ` (${match[2]})`;
+            const splitAmount = amount / 5;
+            investors.forEach(inv => newValues[inv] = splitAmount);
+        } 
+        else if (indivRegex.test(inputStr)) {
+            const match = inputStr.match(indivRegex);
+            const nameStr = match[1];
+            const amount = parseFloat(match[2]);
+            
+            // Find proper capitalization for the name
+            const actualName = investors.find(n => n.toLowerCase() === nameStr.toLowerCase());
+            if (!actualName) {
+                errorMsg.textContent = `Error: Name "${nameStr}" not found.`;
+                return;
+            }
+            label += ` (Individual Deductions)`;
+            newValues[actualName] = amount;
+        } 
+        else {
+            errorMsg.textContent = "Error: Invalid command format. Check the instructions.";
+            return;
+        }
+
+        transactions.push({
+            label: label,
+            values: newValues
+        });
+
+        saveData();
+        document.getElementById('cmd-input').value = "";
+        renderTable();
+    }
+
+    function formatCurrency(num) {
+        return Number(num).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    }
+
+    function renderTable() {
+        const container = document.getElementById('table-container');
+        
+        let html = `<table><thead><tr>
+            <th>Investor</th>
+            <th>Entry Type</th>`;
+            
+        transactions.forEach(t => {
+            html += `<th>${t.label}</th>`;
+        });
+        html += `</tr></thead><tbody>`;
+
+        // Calculate running balances per transaction per user
+        let runningBalances = {};
+        investors.forEach(inv => runningBalances[inv] = []);
+
+        transactions.forEach((t, index) => {
+            investors.forEach(inv => {
+                let prevBalance = index === 0 ? 0 : runningBalances[inv][index - 1];
+                let val = t.values[inv] || 0;
+                runningBalances[inv].push(prevBalance + val);
+            });
+        });
+
+        // Render Investor Rows (2 rows per investor)
+        investors.forEach(inv => {
+            // Row 1: Last Transaction
+            html += `<tr>
+                <td><b>${inv}</b></td>
+                <td>Last Transaction</td>`;
+            transactions.forEach(t => {
+                let val = t.values[inv] || 0;
+                html += `<td>${val > 0 ? '+' : ''}${formatCurrency(val)}</td>`;
+            });
+            html += `</tr>`;
+
+            // Row 2: Balance
+            html += `<tr class="balance-row">
+                <td></td>
+                <td>Balance</td>`;
+            transactions.forEach((t, index) => {
+                html += `<td>${formatCurrency(runningBalances[inv][index])}</td>`;
+            });
+            html += `</tr>`;
+        });
+
+        // Totals Rows
+        html += `<tr class="totals-row">
+            <td><b>Totals</b></td>
+            <td><b>Total Transaction</b></td>`;
+            
+        let runningTotalFund = [];
+        transactions.forEach((t, index) => {
+            let colSum = investors.reduce((sum, inv) => sum + (t.values[inv] || 0), 0);
+            let prevTotal = index === 0 ? 0 : runningTotalFund[index - 1];
+            runningTotalFund.push(prevTotal + colSum);
+            html += `<td><b>${colSum > 0 ? '+' : ''}${formatCurrency(colSum)}</b></td>`;
+        });
+        html += `</tr>`;
+
+        html += `<tr class="totals-row balance-row">
+            <td></td>
+            <td><b>Total Balance</b></td>`;
+        transactions.forEach((t, index) => {
+            html += `<td><b>${formatCurrency(runningTotalFund[index])}</b></td>`;
+        });
+        html += `</tr>`;
+
+        html += `</tbody></table>`;
+        container.innerHTML = html;
+    }
+
+    function resetLedger() {
+        if(confirm("Are you sure you want to delete all data and reset to the initial deposits?")) {
+            localStorage.removeItem('ledgerTxns');
+            initDefault();
+            renderTable();
+        }
+    }
+
+    // Enter key support for input
+    document.getElementById('cmd-input').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') processCommand();
+    });
+
+    // Initial render
+    renderTable();
+</script>
+
+</body>
+</html>
